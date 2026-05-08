@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-  <title>LaserCraft Pro | Cloud Sync</title>
+  <title>LaserCraft Pro | User & Admin Modes</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -39,6 +39,17 @@
     .nav-item i { width: 24px; font-size: 1.2rem; }
     .nav-item:hover { background: rgba(59,130,246,0.15); color: white; }
     .nav-item.active { background: #3b82f6; color: white; box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+    .admin-toggle {
+      margin-top: 20px;
+      padding: 10px 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: 0.2s;
+    }
+    .admin-toggle:hover { background: rgba(59,130,246,0.2); }
     .main-content { flex: 1; overflow-y: auto; background: #f8fafc; }
     .top-bar {
       background: white; padding: 16px 24px; display: flex; justify-content: space-between;
@@ -117,13 +128,18 @@
 <div class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></div>
 <div class="app-container">
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header"><div class="logo"><div class="logo-icon"><i class="fas fa-cogs"></i></div><div class="logo-text"><h2>LaserCraft Pro</h2><p>Cloud Sync</p></div></div></div>
+    <div class="sidebar-header"><div class="logo"><div class="logo-icon"><i class="fas fa-cogs"></i></div><div class="logo-text"><h2>LaserCraft Pro</h2><p>User Mode</p></div></div></div>
     <div class="nav-menu">
       <div class="nav-item" data-page="dashboard"><i class="fas fa-chart-pie"></i><span>Dashboard</span></div>
       <div class="nav-item" data-page="orders"><i class="fas fa-shopping-cart"></i><span>Orders Manager</span></div>
       <div class="nav-item" data-page="quickorder"><i class="fas fa-bolt"></i><span>Quick Order</span></div>
       <div class="nav-item" data-page="products"><i class="fas fa-cube"></i><span>Stock & Products</span></div>
       <div class="nav-item" data-page="reports"><i class="fas fa-file-alt"></i><span>Reports & Sync</span></div>
+    </div>
+    <!-- Admin / User toggle -->
+    <div id="adminToggle" class="admin-toggle">
+      <i id="adminToggleIcon" class="fas fa-lock"></i>
+      <span id="adminToggleText">Admin Mode</span>
     </div>
     <div style="padding: 24px; font-size: 11px; color: #5b6e8c;"><i class="fas fa-cloud"></i> Cloud • Real‑time sync</div>
   </aside>
@@ -160,6 +176,12 @@
 </div>
 
 <script>
+  // ========== GLOBAL STATE ==========
+  let orders = [];
+  let products = [];
+  let isAdmin = false;          // default: user mode (sensitive info hidden)
+  const ADMIN_PASSWORD = "akrem35";
+
   // ========== FIREBASE CONFIGURATION ==========
   const firebaseConfig = {
     apiKey: "AIzaSyDvSDnMszSUX861bm49PU550GsjNtGteAs",
@@ -172,10 +194,6 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
-
-  // ========== GLOBAL DATA ==========
-  let orders = [];
-  let products = [];
 
   // ========== HELPER FUNCTIONS ==========
   function showToast(msg) { 
@@ -226,7 +244,6 @@
       if (!productsSnap.empty) {
         products = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       } else {
-        // Default products (your actual list)
         products = [
           { id: "prod_1", name: "مشط", basePrice: 0, engravingPrice: 0, stock: 0 },
           { id: "prod_2", name: "سلاكة", basePrice: 0, engravingPrice: 0, stock: 0 },
@@ -273,9 +290,7 @@
         batch.set(ref, p);
       });
       await batch.commit();
-    } catch (err) {
-      console.error("Error saving products:", err);
-    }
+    } catch (err) { console.error("Error saving products:", err); }
   }
 
   async function saveOrders() {
@@ -285,7 +300,6 @@
         const ref = db.collection('orders').doc(o.id.toString());
         batch.set(ref, o);
       });
-      // Optionally delete orders that are no longer in local array
       const allDocs = await db.collection('orders').get();
       allDocs.forEach(doc => {
         if (!orders.find(o => o.id.toString() === doc.id)) {
@@ -293,28 +307,14 @@
         }
       });
       await batch.commit();
-    } catch (err) {
-      console.error("Error saving orders:", err);
-    }
+    } catch (err) { console.error("Error saving orders:", err); }
   }
 
   // ========== STOCK & ORDER HELPERS (async) ==========
   async function restoreOrderStock(order) {
     for (let item of order.items) {
       const prod = products.find(p => p.id === item.productId);
-      if (prod) {
-        prod.stock += (item.quantity || 1);
-      }
-    }
-    await saveProducts();
-  }
-
-  async function applyOrderStock(order) {
-    for (let item of order.items) {
-      const prod = products.find(p => p.id === item.productId);
-      if (prod) {
-        prod.stock -= (item.quantity || 1);
-      }
+      if (prod) prod.stock += (item.quantity || 1);
     }
     await saveProducts();
   }
@@ -359,7 +359,7 @@
     const items = formData.items;
     for (let item of items) {
       const prod = products.find(p => p.id === item.productId);
-      if (!prod) return { success: false, msg: `Product not found: ${item.productId}` };
+      if (!prod) return { success: false, msg: `Product not found` };
       if (prod.stock < item.quantity) return { success: false, msg: `${prod.name}: only ${prod.stock} in stock.` };
     }
     for (let item of items) {
@@ -492,7 +492,7 @@
     }
   }
 
-  // ========== QUICK ORDER PARSER ==========
+  // ========== QUICK ORDER PARSER (unchanged) ==========
   function parseQuickOrderText(text) {
     const lines = text.split(/\r?\n/);
     let result = { customerName: '', phone: '', city: '', deliveryType: 'Home', products: [], totalPayment: null };
@@ -727,16 +727,22 @@
   }
 
   function renderDashboard() {
-    const stats = getStats(), lowStock = lowStockAlerts(5), weekly = getWeeklyStats();
+    const stats = getStats();
+    const lowStock = lowStockAlerts(5);
+    const weekly = getWeeklyStats();
     const recent = [...orders].slice(0,5);
+    // Show revenue and profit only if admin
+    const revenueCard = isAdmin ? `<div class="stat-card"><div class="stat-header"><span class="stat-title">Revenue (Delivered)</span><div class="stat-icon"><i class="fas fa-dollar-sign"></i></div></div><div class="stat-value">${formatDA(parseFloat(stats.totalRevenue))}</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-title">Clean Profit (Delivered)</span><div class="stat-icon"><i class="fas fa-coins"></i></div></div><div class="stat-value">${formatDA(parseFloat(stats.totalProfit))}</div></div>` : 
+        `<div class="stat-card"><div class="stat-header"><span class="stat-title">Revenue (Delivered)</span><div class="stat-icon"><i class="fas fa-lock"></i></div></div><div class="stat-value">🔒 Hidden</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-title">Clean Profit (Delivered)</span><div class="stat-icon"><i class="fas fa-lock"></i></div></div><div class="stat-value">🔒 Hidden</div></div>`;
     const html = `
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-header"><span class="stat-title">Total Orders</span><div class="stat-icon"><i class="fas fa-chart-line"></i></div></div><div class="stat-value">${stats.totalOrders}</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-title">Revenue (Delivered)</span><div class="stat-icon"><i class="fas fa-dollar-sign"></i></div></div><div class="stat-value">${formatDA(parseFloat(stats.totalRevenue))}</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-title">Clean Profit (Delivered)</span><div class="stat-icon"><i class="fas fa-coins"></i></div></div><div class="stat-value">${formatDA(parseFloat(stats.totalProfit))}</div></div>
+        ${revenueCard}
       </div>
       <div class="form-card"><div class="flex-between"><h3>Weekly Performance (All Orders)</h3></div><canvas id="weeklyRevenueChart" height="120"></canvas><canvas id="weeklyOrdersChart" height="100" style="margin-top:24px;"></canvas></div>
-      <div class="form-card"><div class="flex-between"><h3>Recent Orders</h3></div><div class="table-wrapper"><thead> <tr><th>Date</th><th>Customer</th><th>Items</th><th>Payment</th><th>Profit</th><th>Deadline</th><th>Status</th></tr> </thead><tbody>${recent.map(o => `<tr class="clickable-row" onclick="viewOrderDetail('${o.id}')"><td>${o.orderDate}</td><td>${o.customerName}</td><td>${o.items.length} item(s)</td><td>${formatDA(o.totalPayment)}</td><td>${formatDA(o.profit)}</td><td>${getDeadlineDisplay(o.orderDate, o.deadlineDays)}</td><td><span class="status-badge status-${o.status}">${o.status}</span></td></tr>`).join('')}${recent.length===0?'<tr><td colspan="7">No orders</td></tr>':''}</tbody></table></div></div>
+      <div class="form-card"><div class="flex-between"><h3>Recent Orders</h3></div><div class="table-wrapper"><thead> <tr><th>Date</th><th>Customer</th><th>Items</th><th>Payment</th>${isAdmin ? '<th>Profit</th>' : ''}<th>Deadline</th><th>Status</th></tr> </thead><tbody>${recent.map(o => `<tr class="clickable-row" onclick="viewOrderDetail('${o.id}')"><td>${o.orderDate}</td><td>${o.customerName}</td><td>${o.items.length} item(s)</td><td>${formatDA(o.totalPayment)}${isAdmin ? `</td><td>${formatDA(o.profit)}` : ''}</td><td>${getDeadlineDisplay(o.orderDate, o.deadlineDays)}</td><td><span class="status-badge status-${o.status}">${o.status}</span></td></tr>`).join('')}${recent.length===0?'<tr><td colspan="7">No orders</td>':''}</tbody><tr></div></div>
       ${lowStock.length ? `<div class="form-card" style="background:#fff6e5;"><i class="fas fa-exclamation-triangle"></i> Low Stock: ${lowStock.map(p=>`${p.name} (${p.stock})`).join(', ')}</div>` : ''}
     `;
     document.getElementById('pageContent').innerHTML = html;
@@ -762,23 +768,25 @@
     let orderRows = filteredOrders.map(o => {
       let productSummary = o.items.map(it => { let p = getProductById(it.productId); return p ? `${p.name} x${it.quantity}` : 'Deleted'; }).join(', ');
       const statusColor = getStatusColor(o.status);
+      // Profit column removed for non-admin
+      const profitCell = isAdmin ? `<td>${formatDA(o.profit)}</td>` : '';
       return `<tr class="clickable-row" onclick="viewOrderDetail('${o.id}')">
         <td>${o.orderDate}</td>
         <td>${o.customerName}</td>
         <td>${productSummary}</td>
         <td>${o.items.length}</td>
-        <td>${formatDA(o.totalPayment)}</td>
-        <td>${formatDA(o.profit)}</td>
+        <td>${formatDA(o.totalPayment)}${isAdmin ? `</td><td>${formatDA(o.profit)}` : ''}</td>
         <td>${getDeadlineDisplay(o.orderDate, o.deadlineDays)}</td>
-        <td><select class="status-update status-select" data-id="${o.id}" style="background-color: ${statusColor};">${['Pending','InProgress','Completed','Delivered'].map(s => `<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td><select class="status-update status-select" data-id="${o.id}" style="background-color: ${statusColor};">${['Pending','InProgress','Completed','Delivered'].map(s => `<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select>
         <td>
           <button class="btn-icon edit-order-btn" data-id="${o.id}" title="Edit Order"><i class="fas fa-edit"></i></button>
           <button class="btn-icon delete-order-btn" data-id="${o.id}" data-customer="${o.customerName}"><i class="fas fa-trash-alt"></i></button>
         </td>
-      </tr>`;
+      </td>`;
     }).join('');
-    if (filteredOrders.length === 0) orderRows = '<tr><td colspan="9">No orders found</td></tr>';
+    if (filteredOrders.length === 0) orderRows = '<tr><td colspan="${isAdmin ? 9 : 8}">No orders found</td></tr>';
     const productOptions = products.map(p => `<option value="${p.id}" data-price="${p.basePrice}" data-engrave="${p.engravingPrice}">${p.name} (stock:${p.stock})</option>`).join('');
+    const profitHeader = isAdmin ? '<th>Profit</th>' : '';
     const html = `
       <div class="form-card"><h3>Create New Order (Multi-Product)</h3><form id="multiOrderForm"><div class="form-grid"><div class="input-group"><label>Customer Name *</label><input type="text" id="custName" required></div><div class="input-group"><label>Phone</label><input type="text" id="custPhone"></div><div class="input-group"><label>City</label><input type="text" id="custCity"></div><div class="input-group"><label>Delivery Type</label><select id="deliveryTypeSel"><option>Home Delivery</option><option>Desk Pickup</option></select></div><div class="input-group"><label>Deadline (days)</label><input type="number" id="deadlineDays" value="3" min="1"></div></div>
       <div style="margin-top:20px;"><h4>Products (enter price per unit, or leave empty for auto-calculated price)</h4><div id="itemsContainer"></div><button type="button" id="addItemBtn" class="btn-secondary" style="margin-top:12px;"><i class="fas fa-plus"></i> Add Product</button></div>
@@ -807,9 +815,9 @@
           </div>
         </div>
         <div class="table-wrapper">
-          <table>
+          </table>
             <thead>
-              <tr><th>Date</th><th>Customer</th><th>Products</th><th>Items</th><th>Payment</th><th>Profit</th><th>Deadline</th><th>Status</th><th>Actions</th></tr>
+              <tr><th>Date</th><th>Customer</th><th>Products</th><th>Items</th><th>Payment</th>${profitHeader}<th>Deadline</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>${orderRows}</tbody>
           </table>
@@ -1013,7 +1021,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
               <tr><th>Product</th><th>Base Price</th><th>Engraving</th><th>Stock</th><th>Actions</th></tr>
             </thead>
             <tbody>${rows}</tbody>
-          </table>
+          <table>
         </div>
       </div>
     `;
@@ -1132,11 +1140,11 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   function renderReportsPage() {
     const stats = getStats();
     const weekly = getWeeklyStats();
+    const revenueHidden = !isAdmin ? '<div class="stat-card"><div class="stat-header"><span class="stat-title">Revenue (Delivered)</span><div class="stat-icon"><i class="fas fa-lock"></i></div></div><div class="stat-value">🔒 Hidden</div></div><div class="stat-card"><div class="stat-header"><span class="stat-title">Profit (Delivered)</span><div class="stat-icon"><i class="fas fa-lock"></i></div></div><div class="stat-value">🔒 Hidden</div></div>' : `<div class="stat-card"><div class="stat-header"><span class="stat-title">Revenue (Delivered)</span></div><div class="stat-value">${formatDA(parseFloat(stats.totalRevenue))}</div></div><div class="stat-card"><div class="stat-header"><span class="stat-title">Profit (Delivered)</span></div><div class="stat-value">${formatDA(parseFloat(stats.totalProfit))}</div></div>`;
     const html = `
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-header"><span class="stat-title">Total Orders</span></div><div class="stat-value">${stats.totalOrders}</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-title">Revenue (Delivered)</span></div><div class="stat-value">${formatDA(parseFloat(stats.totalRevenue))}</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-title">Profit (Delivered)</span></div><div class="stat-value">${formatDA(parseFloat(stats.totalProfit))}</div></div>
+        ${revenueHidden}
       </div>
       <div class="form-card">
         <div class="flex-between"><h3>Data Backup & Sync</h3></div>
@@ -1153,6 +1161,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
       </div>
     `;
     document.getElementById('pageContent').innerHTML = html;
+    // attach all event listeners (same as before)
     document.getElementById('exportFullBackupBtn').addEventListener('click', () => {
       const data = { orders, products };
       const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
@@ -1327,7 +1336,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   function viewOrderDetail(orderId) {
     const o = orders.find(o => o.id == orderId);
     if (!o) return;
-    let itemsHtml = '<table class="items-table"><tr><th>Product</th><th>Qty</th><th>Price/Unit</th><th>Engraving</th><th>Total</th><th>Profit</th></tr>';
+    let itemsHtml = '<table class="items-table"><tr><th>Product</th><th>Qty</th><th>Price/Unit</th><th>Engraving</th><th>Total</th>'+ (isAdmin ? '<th>Profit</th>' : '') +'</thead><tbody>';
     o.items.forEach(it => {
       const prod = getProductById(it.productId);
       if (prod) {
@@ -1339,9 +1348,9 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
         }
         const lineTotal = unitPrice * qty;
         const lineProfit = lineTotal - (prod.basePrice * qty);
-        itemsHtml += `<tr><td>${prod.name}</td><td>${qty}</td><td>${formatDA(unitPrice)}</td><td>${it.engravingNames || '-'}</td><td>${formatDA(lineTotal)}</td><td>${formatDA(lineProfit)}</td></tr>`;
+        itemsHtml += `<tr><td>${prod.name}</td><td>${qty}</td><td>${formatDA(unitPrice)}</td><td>${it.engravingNames || '-'}</td><td>${formatDA(lineTotal)}</td>${isAdmin ? `<td>${formatDA(lineProfit)}</td>` : ''}</tr>`;
       } else {
-        itemsHtml += `<td>Deleted Product</td><td>${it.quantity}</td><td>-</td><td>${it.engravingNames}</td><td>-</td><td>-</td>`;
+        itemsHtml += `<tr><td>Deleted Product</td><td>${it.quantity}</td><td>-</td><td>${it.engravingNames}</td><td>-</td>${isAdmin ? '<td>-</td>' : ''}</tr>`;
       }
     });
     itemsHtml += '</table>';
@@ -1353,7 +1362,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
       <div class="detail-row"><div class="detail-label">Deadline:</div><div>${getDeadlineDisplay(o.orderDate, o.deadlineDays)}</div></div>
       <div class="detail-row"><div class="detail-label">Items:</div><div>${itemsHtml}</div></div>
       <div class="detail-row"><div class="detail-label">Total Payment:</div><div>${formatDA(o.totalPayment)}</div></div>
-      <div class="detail-row"><div class="detail-label">Total Profit:</div><div>${formatDA(o.profit)}</div></div>
+      ${isAdmin ? `<div class="detail-row"><div class="detail-label">Total Profit:</div><div>${formatDA(o.profit)}</div></div>` : ''}
       <div class="detail-row"><div class="detail-label">Status:</div><div><span class="status-badge status-${o.status}">${o.status}</span></div></div>
     `;
     document.getElementById('orderDetailModal').style.display = 'flex';
@@ -1376,6 +1385,45 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
     if (window.innerWidth < 768) document.getElementById('sidebar').classList.remove('open');
   }
 
+  // ========== ADMIN MODE TOGGLE ==========
+  function setAdminMode(admin) {
+    isAdmin = admin;
+    const icon = document.getElementById('adminToggleIcon');
+    const textSpan = document.getElementById('adminToggleText');
+    if (admin) {
+      icon.className = "fas fa-user-check";
+      textSpan.innerText = "User Mode";
+      showToast("Admin mode activated – sensitive data visible");
+    } else {
+      icon.className = "fas fa-lock";
+      textSpan.innerText = "Admin Mode";
+      showToast("User mode – financial data hidden");
+    }
+    // Re-render current page
+    if (currentPage === 'dashboard') renderDashboard();
+    else if (currentPage === 'orders') renderOrdersPage();
+    else if (currentPage === 'reports') renderReportsPage();
+    // Also refresh order detail modal if open
+    if (document.getElementById('orderDetailModal').style.display === 'flex') {
+      const activeOrderId = orders.find(o => o.id == (window._viewingOrderId || 0))?.id;
+      if (activeOrderId) viewOrderDetail(activeOrderId);
+    }
+  }
+
+  document.getElementById('adminToggle').addEventListener('click', () => {
+    if (isAdmin) {
+      // Switch to user mode
+      setAdminMode(false);
+    } else {
+      const pwd = prompt("Enter admin password:");
+      if (pwd === ADMIN_PASSWORD) {
+        setAdminMode(true);
+      } else if (pwd !== null) {
+        showToast("Wrong password");
+      }
+    }
+  });
+
   // ========== INITIALIZATION ==========
   document.getElementById('menuToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
   document.querySelectorAll('.nav-item').forEach(i => i.addEventListener('click', () => navigateTo(i.getAttribute('data-page'))));
@@ -1394,9 +1442,9 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   window.onclick = e => { if (e.target.classList.contains('modal-overlay')) closeModals(); };
   document.getElementById('liveDate').innerText = new Date().toLocaleDateString('en-DZ', { year:'numeric', month:'long', day:'numeric' });
 
-  // Start the app: load data then navigate
   (async () => {
     await loadFromFirestore();
+    setAdminMode(false); // always start in user mode
     navigateTo('dashboard');
   })();
 </script>
