@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-  <title>LaserCraft Pro | Delivered Revenue</title>
+  <title>LaserCraft Pro | Cloud Sync</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <style>
-    /* all styles unchanged from previous version */
+    /* ========== All original styles ========== */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: #f4f6fa; color: #1e293b; }
     .app-container { display: flex; min-height: 100vh; }
@@ -114,7 +117,7 @@
 <div class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></div>
 <div class="app-container">
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header"><div class="logo"><div class="logo-icon"><i class="fas fa-cogs"></i></div><div class="logo-text"><h2>LaserCraft Pro</h2><p>Delivered Revenue</p></div></div></div>
+    <div class="sidebar-header"><div class="logo"><div class="logo-icon"><i class="fas fa-cogs"></i></div><div class="logo-text"><h2>LaserCraft Pro</h2><p>Cloud Sync</p></div></div></div>
     <div class="nav-menu">
       <div class="nav-item" data-page="dashboard"><i class="fas fa-chart-pie"></i><span>Dashboard</span></div>
       <div class="nav-item" data-page="orders"><i class="fas fa-shopping-cart"></i><span>Orders Manager</span></div>
@@ -122,7 +125,7 @@
       <div class="nav-item" data-page="products"><i class="fas fa-cube"></i><span>Stock & Products</span></div>
       <div class="nav-item" data-page="reports"><i class="fas fa-file-alt"></i><span>Reports & Sync</span></div>
     </div>
-    <div style="padding: 24px; font-size: 11px; color: #5b6e8c;"><i class="fas fa-database"></i> Offline • Data persists</div>
+    <div style="padding: 24px; font-size: 11px; color: #5b6e8c;"><i class="fas fa-cloud"></i> Cloud • Real‑time sync</div>
   </aside>
   <main class="main-content">
     <div class="top-bar"><h1 class="page-title" id="currentPageTitle">Dashboard</h1><div class="badge-date"><i class="far fa-calendar-alt"></i> <span id="liveDate"></span></div></div>
@@ -157,71 +160,38 @@
 </div>
 
 <script>
-  // ---------- DATA MODELS ----------
-  let orders = [], products = [];
+  // ========== FIREBASE CONFIGURATION ==========
+  const firebaseConfig = {
+    apiKey: "AIzaSyDvSDnMszSUX861bm49PU550GsjNtGteAs",
+    authDomain: "laser-550ba.firebaseapp.com",
+    projectId: "laser-550ba",
+    storageBucket: "laser-550ba.firebasestorage.app",
+    messagingSenderId: "601996561620",
+    appId: "1:601996561620:web:3eff2796a0be22ec8e7f41",
+    measurementId: "G-FNDS5M3V9R"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
 
-  function loadStorage() {
-    const storedOrders = localStorage.getItem('lasercraft_orders');
-    const storedProducts = localStorage.getItem('lasercraft_products');
-    if (storedOrders) orders = JSON.parse(storedOrders);
-    if (storedProducts) products = JSON.parse(storedProducts);
-    if (products.length === 0) {
-      products = [
-        { id: "prod_1", name: "Wooden Coaster Set", basePrice: 1250, engravingPrice: 320, stock: 42 },
-        { id: "prod_2", name: "Acrylic Keychain", basePrice: 480, engravingPrice: 200, stock: 120 },
-        { id: "prod_3", name: "Leather Wallet Engraved", basePrice: 2200, engravingPrice: 450, stock: 15 },
-        { id: "prod_4", name: "Personalized Plaque", basePrice: 3500, engravingPrice: 700, stock: 9 },
-        { id: "prod_5", name: "Bamboo Cutting Board", basePrice: 1850, engravingPrice: 500, stock: 24 }
-      ];
-      saveProducts();
-    }
-    let changed = false;
-    orders.forEach(o => {
-      if (!o.items && o.productId) {
-        o.items = [{
-          productId: o.productId,
-          quantity: o.quantity || 1,
-          engravingNames: o.engravingNames || '',
-          unitPrice: null
-        }];
-        delete o.productId;
-        delete o.quantity;
-        delete o.engravingNames;
-        changed = true;
-      }
-      if (o.items) {
-        o.items.forEach(item => {
-          if (item.unitPrice === undefined) {
-            if (item.totalPayment !== undefined) {
-              const qty = item.quantity || 1;
-              item.unitPrice = item.totalPayment / qty;
-              delete item.totalPayment;
-              changed = true;
-            } else {
-              item.unitPrice = null;
-              changed = true;
-            }
-          }
-        });
-      }
-    });
-    if (changed) saveOrders();
-    if (orders.length === 0) {
-      orders.push({
-        id: Date.now()+1, customerName: "Sarah Benali", phone: "0556789123", city: "Algiers",
-        deliveryType: "Home", deadlineDays: 3, status: "Pending", orderDate: new Date(Date.now() - 86400000*2).toISOString().split('T')[0],
-        items: [{ productId: "prod_1", quantity: 2, engravingNames: "Nour, Adam", unitPrice: 1250 + 320 }],
-        totalPayment: 0, profit: 0
-      });
-      orders.push({
-        id: Date.now()+2, customerName: "Omar Khelifa", phone: "0665123478", city: "Oran",
-        deliveryType: "Desk", deadlineDays: 5, status: "InProgress", orderDate: new Date().toISOString().split('T')[0],
-        items: [{ productId: "prod_3", quantity: 1, engravingNames: "Leila ♥", unitPrice: 2000 }],
-        totalPayment: 0, profit: 0
-      });
-      recalcAllOrdersFinance();
-      saveOrders();
-    } else recalcAllOrdersFinance();
+  // ========== GLOBAL DATA ==========
+  let orders = [];
+  let products = [];
+
+  // ========== HELPER FUNCTIONS ==========
+  function showToast(msg) { 
+    let t = document.createElement('div'); 
+    t.className = 'toast-notify'; 
+    t.innerText = msg; 
+    document.body.appendChild(t); 
+    setTimeout(() => t.remove(), 2000); 
+  }
+
+  function formatDA(amount) { 
+    return Math.round(amount).toLocaleString('en-DZ') + ' DA'; 
+  }
+
+  function getProductById(pid) { 
+    return products.find(p => p.id === pid); 
   }
 
   function recalcAllOrdersFinance() {
@@ -249,41 +219,116 @@
     });
   }
 
-  function saveOrders() { localStorage.setItem('lasercraft_orders', JSON.stringify(orders)); }
-  function saveProducts() { localStorage.setItem('lasercraft_products', JSON.stringify(products)); }
-  function getProductById(pid) { return products.find(p => p.id === pid); }
+  // ========== FIRESTORE OPERATIONS ==========
+  async function loadFromFirestore() {
+    try {
+      const productsSnap = await db.collection('products').get();
+      if (!productsSnap.empty) {
+        products = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } else {
+        // Default products (your actual list)
+        products = [
+          { id: "prod_1", name: "مشط", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_2", name: "سلاكة", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_3", name: "مرايا", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_4", name: "كوب", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_5", name: "كوب صغير", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_6", name: "baby pack", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_7", name: "فرشاة", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_8", name: "قلم", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_9", name: "كتاشة", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_10", name: "بوشات", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_11", name: "سانتر", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_12", name: "زجاجة", basePrice: 0, engravingPrice: 0, stock: 0 },
+          { id: "prod_13", name: "علبة", basePrice: 0, engravingPrice: 0, stock: 0 }
+        ];
+        const batch = db.batch();
+        products.forEach(p => {
+          const ref = db.collection('products').doc(p.id);
+          batch.set(ref, p);
+        });
+        await batch.commit();
+      }
+      
+      const ordersSnap = await db.collection('orders').orderBy('orderDate', 'desc').get();
+      if (!ordersSnap.empty) {
+        orders = ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        orders.forEach(o => { if (typeof o.id === 'string' && !isNaN(parseInt(o.id))) o.id = parseInt(o.id); });
+      } else {
+        orders = [];
+      }
+      recalcAllOrdersFinance();
+      showToast("Data loaded from cloud");
+    } catch (err) {
+      console.error("Firestore load error:", err);
+      showToast("Error loading data, check console");
+    }
+  }
 
-  // Stock adjustment helpers
-  function restoreOrderStock(order) {
+  async function saveProducts() {
+    try {
+      const batch = db.batch();
+      products.forEach(p => {
+        const ref = db.collection('products').doc(p.id);
+        batch.set(ref, p);
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error("Error saving products:", err);
+    }
+  }
+
+  async function saveOrders() {
+    try {
+      const batch = db.batch();
+      orders.forEach(o => {
+        const ref = db.collection('orders').doc(o.id.toString());
+        batch.set(ref, o);
+      });
+      // Optionally delete orders that are no longer in local array
+      const allDocs = await db.collection('orders').get();
+      allDocs.forEach(doc => {
+        if (!orders.find(o => o.id.toString() === doc.id)) {
+          batch.delete(doc.ref);
+        }
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error("Error saving orders:", err);
+    }
+  }
+
+  // ========== STOCK & ORDER HELPERS (async) ==========
+  async function restoreOrderStock(order) {
     for (let item of order.items) {
       const prod = products.find(p => p.id === item.productId);
       if (prod) {
         prod.stock += (item.quantity || 1);
       }
     }
-    saveProducts();
+    await saveProducts();
   }
 
-  function applyOrderStock(order) {
+  async function applyOrderStock(order) {
     for (let item of order.items) {
       const prod = products.find(p => p.id === item.productId);
       if (prod) {
         prod.stock -= (item.quantity || 1);
       }
     }
-    saveProducts();
+    await saveProducts();
   }
 
-  function updateOrder(orderId, newOrderData) {
+  async function updateOrder(orderId, newOrderData) {
     const orderIndex = orders.findIndex(o => o.id == orderId);
     if (orderIndex === -1) return false;
     const oldOrder = orders[orderIndex];
-    restoreOrderStock(oldOrder);
+    await restoreOrderStock(oldOrder);
     for (let item of newOrderData.items) {
       const prod = products.find(p => p.id === item.productId);
       if (!prod) { alert(`Product not found: ${item.productId}`); return false; }
       if (prod.stock < (item.quantity || 1)) {
-        alert(`${prod.name}: only ${prod.stock} in stock. Cannot update order.`);
+        alert(`${prod.name}: only ${prod.stock} in stock.`);
         return false;
       }
     }
@@ -291,7 +336,7 @@
       const prod = products.find(p => p.id === item.productId);
       prod.stock -= (item.quantity || 1);
     }
-    saveProducts();
+    await saveProducts();
     const updatedOrder = {
       ...oldOrder,
       customerName: newOrderData.customerName,
@@ -305,12 +350,12 @@
     };
     orders[orderIndex] = updatedOrder;
     recalcAllOrdersFinance();
-    saveOrders();
+    await saveOrders();
     showToast("Order updated");
     return true;
   }
 
-  function addNewOrder(formData) {
+  async function addNewOrder(formData) {
     const items = formData.items;
     for (let item of items) {
       const prod = products.find(p => p.id === item.productId);
@@ -321,7 +366,7 @@
       const prod = products.find(p => p.id === item.productId);
       prod.stock -= item.quantity;
     }
-    saveProducts();
+    await saveProducts();
     const newOrder = {
       id: Date.now(),
       customerName: formData.customerName,
@@ -337,12 +382,12 @@
     };
     recalcAllOrdersFinance();
     orders.unshift(newOrder);
-    saveOrders();
+    await saveOrders();
     showToast("Order placed");
     return { success: true };
   }
 
-  function deleteOrder(orderId) {
+  async function deleteOrder(orderId) {
     const orderIndex = orders.findIndex(o => o.id == orderId);
     if (orderIndex === -1) return false;
     const order = orders[orderIndex];
@@ -350,69 +395,66 @@
       const prod = products.find(p => p.id === item.productId);
       if (prod) prod.stock += (item.quantity || 1);
     }
-    saveProducts();
+    await saveProducts();
     orders.splice(orderIndex, 1);
-    saveOrders();
+    await saveOrders();
     showToast("Order deleted");
     return true;
   }
 
-  function updateOrderStatus(orderId, newStatus) {
+  async function updateOrderStatus(orderId, newStatus) {
     const order = orders.find(o => o.id == orderId);
-    if (order) { order.status = newStatus; saveOrders(); return true; }
+    if (order) { order.status = newStatus; await saveOrders(); return true; }
     return false;
   }
 
-  function addOrUpdateProduct(productData) {
-  // productData: { id, name, basePrice, engravingPrice, stock, isUpdate? }
-  // If id is provided and exists, update name and prices, and optionally add stock.
-  const existing = products.find(p => p.id === productData.id);
-  if (existing) {
-    existing.name = productData.name;
-    existing.basePrice = productData.basePrice;
-    existing.engravingPrice = productData.engravingPrice;
-    // stock is additive (for restocking) or if we pass a new stock value, we can set it.
-    if (productData.stock !== undefined && productData.stock !== null) {
-      existing.stock += productData.stock;
+  async function addOrUpdateProduct(productData) {
+    const existing = products.find(p => p.id === productData.id);
+    if (existing) {
+      existing.name = productData.name;
+      existing.basePrice = productData.basePrice;
+      existing.engravingPrice = productData.engravingPrice;
+      if (productData.stock !== undefined && productData.stock !== null) {
+        existing.stock += productData.stock;
+      }
+      await saveProducts();
+      recalcAllOrdersFinance();
+      await saveOrders();
+      showToast(`Product "${productData.name}" updated`);
+      return true;
+    } else {
+      const newId = "prod_" + Date.now();
+      const newProduct = {
+        id: newId,
+        name: productData.name,
+        basePrice: productData.basePrice,
+        engravingPrice: productData.engravingPrice,
+        stock: productData.stock || 0
+      };
+      products.push(newProduct);
+      await saveProducts();
+      recalcAllOrdersFinance();
+      await saveOrders();
+      showToast(`New product "${productData.name}" added`);
+      return true;
     }
-    saveProducts();
-    recalcAllOrdersFinance();
-    saveOrders();
-    showToast(`Product "${productData.name}" updated`);
-    return true;
-  } else {
-    // New product
-    const newId = "prod_" + Date.now();
-    products.push({
-      id: newId,
-      name: productData.name,
-      basePrice: productData.basePrice,
-      engravingPrice: productData.engravingPrice,
-      stock: productData.stock || 0
-    });
-    saveProducts();
-    recalcAllOrdersFinance();
-    saveOrders();
-    showToast(`New product "${productData.name}" added`);
-    return true;
   }
-}
 
-  function restockProductById(productId, qty) {
+  async function restockProductById(productId, qty) {
     const prod = products.find(p => p.id === productId);
-    if (prod) { prod.stock += qty; saveProducts(); showToast(`Added ${qty} to stock`); return true; }
+    if (prod) { prod.stock += qty; await saveProducts(); showToast(`Added ${qty} to stock`); return true; }
     return false;
   }
 
-  function deleteProduct(productId, name) {
+  async function deleteProduct(productId, name) {
     const used = orders.some(o => o.items.some(i => i.productId === productId && (o.status === "Pending" || o.status === "InProgress")));
     if (used && !confirm(`Product used in active orders. Delete anyway?`)) return false;
     const idx = products.findIndex(p => p.id === productId);
-    if (idx !== -1) { products.splice(idx, 1); saveProducts(); recalcAllOrdersFinance(); saveOrders(); showToast(`Deleted ${name}`); return true; }
+    if (idx !== -1) { products.splice(idx, 1); await saveProducts(); recalcAllOrdersFinance(); await saveOrders(); showToast(`Deleted ${name}`); return true; }
     return false;
   }
 
-  // UPDATED: Revenue and Profit only from Delivered orders
+  // ========== STATS & OTHER HELPERS ==========
   function getStats() {
     const totalOrders = orders.length;
     const deliveredOrders = orders.filter(o => o.status === 'Delivered');
@@ -429,8 +471,7 @@
     orders.forEach(o => { if (daily.has(o.orderDate)) { let e = daily.get(o.orderDate); e.orders++; e.revenue += o.totalPayment; daily.set(o.orderDate, e); } });
     return { labels: last7, orderCounts: last7.map(d => daily.get(d).orders), revenues: last7.map(d => daily.get(d).revenue) };
   }
-  function formatDA(amount) { return Math.round(amount).toLocaleString('en-DZ') + ' DA'; }
-  function showToast(msg) { let t = document.createElement('div'); t.className = 'toast-notify'; t.innerText = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
+
   function getDeadlineDisplay(orderDateStr, days) {
     let orderDate = new Date(orderDateStr), deadline = new Date(orderDate); deadline.setDate(orderDate.getDate() + days);
     let today = new Date(); today.setHours(0,0,0,0);
@@ -441,173 +482,130 @@
     return formatted;
   }
 
-  // ---------- QUICK ORDER PARSER (unchanged) ----------
+  function getStatusColor(status) {
+    switch(status) {
+      case 'Pending': return '#d67a7a';
+      case 'InProgress': return '#3756bd';
+      case 'Completed': return '#3daa65';
+      case 'Delivered': return '#cfda94';
+      default: return '#f1f5f9';
+    }
+  }
+
+  // ========== QUICK ORDER PARSER ==========
   function parseQuickOrderText(text) {
-  const lines = text.split(/\r?\n/);
-  let result = {
-    customerName: '',
-    phone: '',
-    city: '',
-    deliveryType: 'Home',
-    products: [],
-    totalPayment: null
-  };
-
-  // Helper: extract value after keyword (Arabic/English)
-  function extractField(patterns, defaultValue = '') {
-    for (let line of lines) {
-      for (let pattern of patterns) {
-        const regex = new RegExp(`${pattern}[:\\s]+(.*)`, 'i');
-        const match = line.match(regex);
-        if (match) return match[1].trim();
-        if (line.toLowerCase().includes(pattern.toLowerCase())) {
-          const parts = line.split(/[:：]/);
-          if (parts.length > 1) return parts.slice(1).join(':').trim();
-        }
-      }
-    }
-    return defaultValue;
-  }
-
-  // Extract basic fields
-  result.customerName = extractField(['name', 'الاسم', 'client', 'customer', 'الزبون']);
-  result.phone = extractField(['phone', 'هاتف', 'tel', 'mobile', 'رقم']);
-  result.city = extractField(['city', 'ville', 'مدينة', 'city', 'الولاية']);
-  const deliveryRaw = extractField(['delivery', 'livraison', 'توصيل', 'نوع التوصيل']);
-  if (deliveryRaw) {
-    const d = deliveryRaw.toLowerCase();
-    if (d.includes('منزل') || d.includes('home') || d.includes('domicile')) result.deliveryType = 'Home';
-    else if (d.includes('مكتب') || d.includes('desk') || d.includes('bureau')) result.deliveryType = 'Desk';
-  }
-
-  // Extract total payment if present
-  const totalMatch = text.match(/(?:total|المجموع|prix total|payment|المبلغ)[\s:]*(\d+(?:\.\d+)?)/i);
-  if (totalMatch) result.totalPayment = parseFloat(totalMatch[1]);
-
-  // --- Products parsing ---
-  let productsLine = '';
-  for (let line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.includes('product') || lower.includes('produits') || lower.includes('products') || lower.includes('المنتجات') || lower.includes('items')) {
-      productsLine = line;
-      break;
-    }
-  }
-  // fallback: find any line that contains a known product name
-  if (!productsLine) {
-    for (let line of lines) {
-      for (let prod of products) {
-        if (line.includes(prod.name)) {
-          productsLine = line;
-          break;
-        }
-      }
-      if (productsLine) break;
-    }
-  }
-
-  if (productsLine) {
-    // Remove label part (e.g., "products:" or "المنتجات:")
-    let productText = productsLine.replace(/^[^:：]*[:：]\s*/, '');
-    // Split by + or ، or , or newline
-    const parts = productText.split(/[+،,\n]/);
-    
-    // Helper: convert Arabic numerals to Latin
-    function toLatinNum(str) {
-      const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
-      const latinDigits = '0123456789';
-      return str.replace(/[٠-٩]/g, d => latinDigits[arabicDigits.indexOf(d)]);
-    }
-
-    for (let part of parts) {
-      part = part.trim();
-      if (!part) continue;
-      // Remove stray punctuation at the end (dot, comma, semicolon)
-      part = part.replace(/[.,;]$/, '').trim();
-      if (!part) continue;
-
-      let quantity = 1;
-      let namePart = part;
-      const latinPart = toLatinNum(part);
-      
-      // Try different quantity patterns
-      const afterMatch = latinPart.match(/^(.*?)\s+(\d+)$/);     // product 2
-      const beforeMatch = latinPart.match(/^(\d+)\s+(.*)$/);     // 2 product
-      const xMatch = latinPart.match(/(?:x(\d+)|(\d+)x|\((\d+)\))$/i);
-      
-      if (afterMatch) {
-        namePart = afterMatch[1].trim();
-        quantity = parseInt(afterMatch[2]);
-      } else if (beforeMatch) {
-        namePart = beforeMatch[2].trim();
-        quantity = parseInt(beforeMatch[1]);
-      } else if (xMatch) {
-        quantity = parseInt(xMatch[1] || xMatch[2] || xMatch[3]) || 1;
-        namePart = part.replace(/(?:x\d+|\d+x|\(\d+\))$/, '').trim();
-      }
-      
-      // Optional: normalise plurals (e.g., مرايا → مراية)
-      namePart = namePart.replace(/ايا$/, 'اية');   // مرايا → مراية
-      
-      // --- Synonym mapping (CUSTOMISE THIS FOR YOUR PRODUCTS) ---
-      // The right‑hand side must EXACTLY match the `name` field of a product in your `products` array.
-      const synonyms = {
-        'مشط خشبي': 'مشط خشبي',    // change to your actual product name
-        'مراية': 'مراية',          // change to your actual product name
-        'مرايا': 'مراية',          // plural maps to singular product name
-        'سلاكة': 'سلاكة',          // change accordingly
-        'فرشاة': 'فرشاة'           // change accordingly
-      };
-      
-      let matchedProduct = null;
-      // First try direct match
-      for (let prod of products) {
-        if (namePart === prod.name) {
-          matchedProduct = prod;
-          break;
-        }
-      }
-      // Then try synonym resolution
-      if (!matchedProduct && synonyms[namePart]) {
-        const targetName = synonyms[namePart];
-        matchedProduct = products.find(p => p.name === targetName);
-      }
-      // Lastly try partial match (fallback)
-      if (!matchedProduct) {
-        for (let prod of products) {
-          if (namePart.includes(prod.name) || prod.name.includes(namePart)) {
-            matchedProduct = prod;
-            break;
+    const lines = text.split(/\r?\n/);
+    let result = { customerName: '', phone: '', city: '', deliveryType: 'Home', products: [], totalPayment: null };
+    function extractField(patterns, defaultValue = '') {
+      for (let line of lines) {
+        for (let pattern of patterns) {
+          const regex = new RegExp(`${pattern}[:\\s]+(.*)`, 'i');
+          const match = line.match(regex);
+          if (match) return match[1].trim();
+          if (line.toLowerCase().includes(pattern.toLowerCase())) {
+            const parts = line.split(/[:：]/);
+            if (parts.length > 1) return parts.slice(1).join(':').trim();
           }
         }
       }
-      
-      if (matchedProduct) {
-        result.products.push({
-          productId: matchedProduct.id,
-          quantity: quantity,
-          engravingNames: ''   // no engraving names in quick order
-        });
-      } else {
-        console.warn(`Product not recognized: "${namePart}" from part "${part}"`);
+      return defaultValue;
+    }
+    result.customerName = extractField(['name', 'الاسم', 'client', 'customer', 'الزبون']);
+    result.phone = extractField(['phone', 'هاتف', 'tel', 'mobile', 'رقم']);
+    result.city = extractField(['city', 'ville', 'مدينة', 'city', 'الولاية']);
+    const deliveryRaw = extractField(['delivery', 'livraison', 'توصيل', 'نوع التوصيل']);
+    if (deliveryRaw) {
+      const d = deliveryRaw.toLowerCase();
+      if (d.includes('منزل') || d.includes('home') || d.includes('domicile')) result.deliveryType = 'Home';
+      else if (d.includes('مكتب') || d.includes('desk') || d.includes('bureau')) result.deliveryType = 'Desk';
+    }
+    const totalMatch = text.match(/(?:total|المجموع|prix total|payment|المبلغ)[\s:]*(\d+(?:\.\d+)?)/i);
+    if (totalMatch) result.totalPayment = parseFloat(totalMatch[1]);
+    let productsLine = '';
+    for (let line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.includes('product') || lower.includes('produits') || lower.includes('products') || lower.includes('المنتجات') || lower.includes('items')) {
+        productsLine = line;
+        break;
       }
     }
-  }
-
-  // Fallback: try to find products anywhere in the text if none found above
-  if (result.products.length === 0) {
-    for (let prod of products) {
-      if (text.includes(prod.name)) {
-        result.products.push({ productId: prod.id, quantity: 1, engravingNames: '' });
+    if (!productsLine) {
+      for (let line of lines) {
+        for (let prod of products) {
+          if (line.includes(prod.name)) { productsLine = line; break; }
+        }
+        if (productsLine) break;
       }
     }
+    if (productsLine) {
+      let productText = productsLine.replace(/^[^:：]*[:：]\s*/, '');
+      const parts = productText.split(/[+،,\n]/);
+      function toLatinNum(str) {
+        const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+        const latinDigits = '0123456789';
+        return str.replace(/[٠-٩]/g, d => latinDigits[arabicDigits.indexOf(d)]);
+      }
+      for (let part of parts) {
+        part = part.trim();
+        if (!part) continue;
+        part = part.replace(/[.,;]$/, '').trim();
+        if (!part) continue;
+        let quantity = 1;
+        let namePart = part;
+        const latinPart = toLatinNum(part);
+        const afterMatch = latinPart.match(/^(.*?)\s+(\d+)$/);
+        const beforeMatch = latinPart.match(/^(\d+)\s+(.*)$/);
+        const xMatch = latinPart.match(/(?:x(\d+)|(\d+)x|\((\d+)\))$/i);
+        if (afterMatch) {
+          namePart = afterMatch[1].trim();
+          quantity = parseInt(afterMatch[2]);
+        } else if (beforeMatch) {
+          namePart = beforeMatch[2].trim();
+          quantity = parseInt(beforeMatch[1]);
+        } else if (xMatch) {
+          quantity = parseInt(xMatch[1] || xMatch[2] || xMatch[3]) || 1;
+          namePart = part.replace(/(?:x\d+|\d+x|\(\d+\))$/, '').trim();
+        }
+        namePart = namePart.replace(/ايا$/, 'اية');
+        const synonyms = {
+          'مشط': 'مشط', 'سلاكة': 'سلاكة', 'مرايا': 'مرايا', 'مراية': 'مرايا',
+          'كوب': 'كوب', 'كوب صغير': 'كوب صغير', 'baby pack': 'baby pack',
+          'فرشاة': 'فرشاة', 'قلم': 'قلم', 'كتاشة': 'كتاشة', 'بوشات': 'بوشات',
+          'سانتر': 'سانتر', 'زجاجة': 'زجاجة', 'علبة': 'علبة'
+        };
+        let matchedProduct = null;
+        for (let prod of products) {
+          if (namePart === prod.name) { matchedProduct = prod; break; }
+        }
+        if (!matchedProduct && synonyms[namePart]) {
+          const targetName = synonyms[namePart];
+          matchedProduct = products.find(p => p.name === targetName);
+        }
+        if (!matchedProduct) {
+          for (let prod of products) {
+            if (namePart.includes(prod.name) || prod.name.includes(namePart)) {
+              matchedProduct = prod;
+              break;
+            }
+          }
+        }
+        if (matchedProduct) {
+          result.products.push({ productId: matchedProduct.id, quantity: quantity, engravingNames: '' });
+        }
+      }
+    }
+    if (result.products.length === 0) {
+      for (let prod of products) {
+        if (text.includes(prod.name)) {
+          result.products.push({ productId: prod.id, quantity: 1, engravingNames: '' });
+        }
+      }
+    }
+    result.deadlineDays = 3;
+    return result;
   }
 
-  result.deadlineDays = 3; // default
-  return result;
-}
-
-  function createOrderFromParsed(parsed) {
+  async function createOrderFromParsed(parsed) {
     if (!parsed.customerName) { alert('Customer name required.'); return false; }
     if (parsed.products.length === 0) { alert('No products recognized.'); return false; }
     let items = parsed.products.map(p => ({ productId: p.productId, quantity: p.quantity, engravingNames: p.engravingNames, unitPrice: null }));
@@ -633,23 +631,14 @@
         }
       }
     }
-    const result = addNewOrder({ customerName: parsed.customerName, phone: parsed.phone, city: parsed.city, deliveryType: parsed.deliveryType, deadlineDays: parsed.deadlineDays, items });
+    const result = await addNewOrder({ customerName: parsed.customerName, phone: parsed.phone, city: parsed.city, deliveryType: parsed.deliveryType, deadlineDays: parsed.deadlineDays, items });
     if (result.success) { showToast('Quick order created!'); return true; } else { alert(result.msg); return false; }
   }
 
-  // ---------- RENDER FUNCTIONS ----------
+  // ========== RENDER FUNCTIONS ==========
   let revenueChart, ordersChart, pendingDeleteOrderId, pendingDeleteProductId, pendingDeleteProductName;
   let currentEditOrderId = null;
-
-  function getStatusColor(status) {
-    switch(status) {
-      case 'Pending': return '#d67a7a';
-      case 'InProgress': return '#3756bd';
-      case 'Completed': return '#3daa65';
-      case 'Delivered': return '#cfda94';
-      default: return '#f1f5f9';
-    }
-  }
+  let currentPage = 'dashboard';
 
   function openEditOrderModal(orderId) {
     const order = orders.find(o => o.id == orderId);
@@ -707,7 +696,7 @@
     updateAutoPrice();
   }
 
-  function saveOrderEdit() {
+  async function saveOrderEdit() {
     if (!currentEditOrderId) return;
     const items = [];
     const rows = document.querySelectorAll('#editItemsContainer > .edit-item-row');
@@ -729,7 +718,7 @@
       items: items
     };
     if (!orderData.customerName) { alert("Customer name required"); return; }
-    const success = updateOrder(currentEditOrderId, orderData);
+    const success = await updateOrder(currentEditOrderId, orderData);
     if (success) {
       document.getElementById('editOrderModal').style.display = 'none';
       renderOrdersPage();
@@ -760,200 +749,184 @@
   }
 
   function renderOrdersPage() {
-  // Get current filters from global variables
-  let currentSearchPhone = window._phoneSearchTerm || '';
-  let currentStatusFilter = window._statusFilter || 'All';
-
-  // Apply filters
-  let filteredOrders = orders;
-  if (currentSearchPhone.trim() !== '') {
-    filteredOrders = filteredOrders.filter(o => o.phone && o.phone.includes(currentSearchPhone.trim()));
-  }
-  if (currentStatusFilter !== 'All') {
-    filteredOrders = filteredOrders.filter(o => o.status === currentStatusFilter);
-  }
-
-  // Generate table rows from filtered orders
-  let orderRows = filteredOrders.map(o => {
-    let productSummary = o.items.map(it => { let p = getProductById(it.productId); return p ? `${p.name} x${it.quantity}` : 'Deleted'; }).join(', ');
-    const statusColor = getStatusColor(o.status);
-    return `<tr class="clickable-row" onclick="viewOrderDetail('${o.id}')">
-      <td>${o.orderDate}</td>
-      <td>${o.customerName}</td>
-      <td>${productSummary}</td>
-      <td>${o.items.length}</td>
-      <td>${formatDA(o.totalPayment)}</td>
-      <td>${formatDA(o.profit)}</td>
-      <td>${getDeadlineDisplay(o.orderDate, o.deadlineDays)}</td>
-      <td><select class="status-update status-select" data-id="${o.id}" style="background-color: ${statusColor};">${['Pending','InProgress','Completed','Delivered'].map(s => `<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td>
-        <button class="btn-icon edit-order-btn" data-id="${o.id}" title="Edit Order"><i class="fas fa-edit"></i></button>
-        <button class="btn-icon delete-order-btn" data-id="${o.id}" data-customer="${o.customerName}"><i class="fas fa-trash-alt"></i></button>
-      </td>
-    </tr>`;
-  }).join('');
-  
-  if (filteredOrders.length === 0) orderRows = '<tr><td colspan="9">No orders found</td></tr>';
-  
-  const productOptions = products.map(p => `<option value="${p.id}" data-price="${p.basePrice}" data-engrave="${p.engravingPrice}">${p.name} (stock:${p.stock})</option>`).join('');
-  
-  const html = `
-    <div class="form-card"><h3>Create New Order (Multi-Product)</h3><form id="multiOrderForm"><div class="form-grid"><div class="input-group"><label>Customer Name *</label><input type="text" id="custName" required></div><div class="input-group"><label>Phone</label><input type="text" id="custPhone"></div><div class="input-group"><label>City</label><input type="text" id="custCity"></div><div class="input-group"><label>Delivery Type</label><select id="deliveryTypeSel"><option>Home Delivery</option><option>Desk Pickup</option></select></div><div class="input-group"><label>Deadline (days)</label><input type="number" id="deadlineDays" value="3" min="1"></div></div>
-    <div style="margin-top:20px;"><h4>Products (enter price per unit, or leave empty for auto-calculated price)</h4><div id="itemsContainer"></div><button type="button" id="addItemBtn" class="btn-secondary" style="margin-top:12px;"><i class="fas fa-plus"></i> Add Product</button></div>
-    <div style="margin-top:20px;"><button type="submit" class="btn-primary"><i class="fas fa-save"></i> Place Order</button></div></form></div>
-    
-    <div class="form-card">
-      <div class="flex-between" style="flex-wrap: wrap; gap: 16px;">
-        <h3>All Orders</h3>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <div class="input-group" style="width: 220px;">
-            <label><i class="fas fa-search"></i> Search by Phone:</label>
-            <input type="text" id="searchPhoneInput" placeholder="Type phone number..." value="${currentSearchPhone}" style="padding: 8px 12px; border-radius: 14px; border: 1px solid #cbd5e1;">
-          </div>
-          <div class="input-group" style="width: 180px;">
-            <label><i class="fas fa-filter"></i> Filter by Status:</label>
-            <select id="statusFilterSelect" style="padding: 8px 12px; border-radius: 14px; border: 1px solid #cbd5e1;">
-              <option value="All" ${currentStatusFilter === 'All' ? 'selected' : ''}>All Orders</option>
-              <option value="Pending" ${currentStatusFilter === 'Pending' ? 'selected' : ''}>Pending</option>
-              <option value="InProgress" ${currentStatusFilter === 'InProgress' ? 'selected' : ''}>In Progress</option>
-              <option value="Completed" ${currentStatusFilter === 'Completed' ? 'selected' : ''}>Completed</option>
-              <option value="Delivered" ${currentStatusFilter === 'Delivered' ? 'selected' : ''}>Delivered</option>
-            </select>
+    let currentSearchPhone = window._phoneSearchTerm || '';
+    let currentStatusFilter = window._statusFilter || 'All';
+    let filteredOrders = orders;
+    if (currentSearchPhone.trim() !== '') {
+      const searchDigits = currentSearchPhone.replace(/\s/g, '');
+      filteredOrders = filteredOrders.filter(o => o.phone && o.phone.replace(/\s/g, '').includes(searchDigits));
+    }
+    if (currentStatusFilter !== 'All') {
+      filteredOrders = filteredOrders.filter(o => o.status === currentStatusFilter);
+    }
+    let orderRows = filteredOrders.map(o => {
+      let productSummary = o.items.map(it => { let p = getProductById(it.productId); return p ? `${p.name} x${it.quantity}` : 'Deleted'; }).join(', ');
+      const statusColor = getStatusColor(o.status);
+      return `<tr class="clickable-row" onclick="viewOrderDetail('${o.id}')">
+        <td>${o.orderDate}</td>
+        <td>${o.customerName}</td>
+        <td>${productSummary}</td>
+        <td>${o.items.length}</td>
+        <td>${formatDA(o.totalPayment)}</td>
+        <td>${formatDA(o.profit)}</td>
+        <td>${getDeadlineDisplay(o.orderDate, o.deadlineDays)}</td>
+        <td><select class="status-update status-select" data-id="${o.id}" style="background-color: ${statusColor};">${['Pending','InProgress','Completed','Delivered'].map(s => `<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td>
+          <button class="btn-icon edit-order-btn" data-id="${o.id}" title="Edit Order"><i class="fas fa-edit"></i></button>
+          <button class="btn-icon delete-order-btn" data-id="${o.id}" data-customer="${o.customerName}"><i class="fas fa-trash-alt"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+    if (filteredOrders.length === 0) orderRows = '<tr><td colspan="9">No orders found</td></tr>';
+    const productOptions = products.map(p => `<option value="${p.id}" data-price="${p.basePrice}" data-engrave="${p.engravingPrice}">${p.name} (stock:${p.stock})</option>`).join('');
+    const html = `
+      <div class="form-card"><h3>Create New Order (Multi-Product)</h3><form id="multiOrderForm"><div class="form-grid"><div class="input-group"><label>Customer Name *</label><input type="text" id="custName" required></div><div class="input-group"><label>Phone</label><input type="text" id="custPhone"></div><div class="input-group"><label>City</label><input type="text" id="custCity"></div><div class="input-group"><label>Delivery Type</label><select id="deliveryTypeSel"><option>Home Delivery</option><option>Desk Pickup</option></select></div><div class="input-group"><label>Deadline (days)</label><input type="number" id="deadlineDays" value="3" min="1"></div></div>
+      <div style="margin-top:20px;"><h4>Products (enter price per unit, or leave empty for auto-calculated price)</h4><div id="itemsContainer"></div><button type="button" id="addItemBtn" class="btn-secondary" style="margin-top:12px;"><i class="fas fa-plus"></i> Add Product</button></div>
+      <div style="margin-top:20px;"><button type="submit" class="btn-primary"><i class="fas fa-save"></i> Place Order</button></div></form></div>
+      <div class="form-card">
+        <div class="flex-between" style="flex-wrap: wrap; gap: 16px;">
+          <h3>All Orders</h3>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="input-group" style="width: 260px;">
+              <label><i class="fas fa-search"></i> Search by Phone:</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="searchPhoneInput" placeholder="Type phone number..." value="${currentSearchPhone}" style="flex: 1; padding: 8px 12px; border-radius: 14px; border: 1px solid #cbd5e1;">
+                <button id="searchPhoneBtn" class="btn-secondary" style="padding: 8px 16px;"><i class="fas fa-search"></i> Search</button>
+              </div>
+            </div>
+            <div class="input-group" style="width: 180px;">
+              <label><i class="fas fa-filter"></i> Filter by Status:</label>
+              <select id="statusFilterSelect" style="padding: 8px 12px; border-radius: 14px; border: 1px solid #cbd5e1;">
+                <option value="All" ${currentStatusFilter === 'All' ? 'selected' : ''}>All Orders</option>
+                <option value="Pending" ${currentStatusFilter === 'Pending' ? 'selected' : ''}>Pending</option>
+                <option value="InProgress" ${currentStatusFilter === 'InProgress' ? 'selected' : ''}>In Progress</option>
+                <option value="Completed" ${currentStatusFilter === 'Completed' ? 'selected' : ''}>Completed</option>
+                <option value="Delivered" ${currentStatusFilter === 'Delivered' ? 'selected' : ''}>Delivered</option>
+              </select>
+            </div>
           </div>
         </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Customer</th><th>Products</th><th>Items</th><th>Payment</th><th>Profit</th><th>Deadline</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>${orderRows}</tbody>
+          </table>
+        </div>
       </div>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr><th>Date</th><th>Customer</th><th>Products</th><th>Items</th><th>Payment</th><th>Profit</th><th>Deadline</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>${orderRows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-  
-  document.getElementById('pageContent').innerHTML = html;
-  
-  // ---- Re-attach all existing event listeners ----
-  const container = document.getElementById('itemsContainer');
-  function addItemRow(productId='', quantity=1, engraving='', unitPrice='') {
-    const rowDiv = document.createElement('div');
-    rowDiv.className = 'form-grid';
-    rowDiv.style.border = '1px solid #e2e8f0';
-    rowDiv.style.padding = '12px';
-    rowDiv.style.borderRadius = '16px';
-    rowDiv.style.marginBottom = '12px';
-    const selectedProd = products.find(p => p.id === productId);
-    const defaultUnitPrice = selectedProd ? (selectedProd.basePrice) : '';
-    const unitVal = unitPrice !== '' ? unitPrice : defaultUnitPrice;
-    rowDiv.innerHTML = `
-      <div class="input-group"><label>Product</label><select class="item-product">${products.map(p => `<option value="${p.id}" data-price="${p.basePrice}" data-engrave="${p.engravingPrice}" ${p.id===productId?'selected':''}>${p.name} (stock:${p.stock})</option>`).join('')}</select></div>
-      <div class="input-group"><label>Quantity</label><input type="number" class="item-qty" value="${quantity}" min="1" step="1"></div>
-      <div class="input-group"><label>Price per Unit (DA)</label><input type="number" class="item-unit-price" step="1" value="${unitVal}" placeholder="Leave empty for auto price"></div>
-      <div class="input-group"><label>Names to engrave (comma)</label><textarea class="item-engraving" rows="2">${engraving}</textarea></div>
-      <div style="display:flex; align-items:flex-end;"><button type="button" class="btn-icon remove-item"><i class="fas fa-trash-alt"></i></button></div>
     `;
-    const productSelect = rowDiv.querySelector('.item-product');
-    const qtyInput = rowDiv.querySelector('.item-qty');
-    const unitPriceInput = rowDiv.querySelector('.item-unit-price');
-    const engravingInput = rowDiv.querySelector('.item-engraving');
-    const updateAutoPrice = () => {
-      const selectedOption = productSelect.options[productSelect.selectedIndex];
-      const basePrice = parseFloat(selectedOption.getAttribute('data-price'));
-      const engravePrice = parseFloat(selectedOption.getAttribute('data-engrave'));
-      const engravingText = engravingInput.value;
-      const nameCount = engravingText ? engravingText.split(',').filter(n => n.trim().length > 0).length : 1;
-      const autoPrice = basePrice + (engravePrice * nameCount);
-      if (!unitPriceInput.value || unitPriceInput.value === '') {
-        unitPriceInput.value = autoPrice;
+    document.getElementById('pageContent').innerHTML = html;
+    const container = document.getElementById('itemsContainer');
+    function addItemRow(productId='', quantity=1, engraving='', unitPrice='') {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'form-grid';
+      rowDiv.style.border = '1px solid #e2e8f0';
+      rowDiv.style.padding = '12px';
+      rowDiv.style.borderRadius = '16px';
+      rowDiv.style.marginBottom = '12px';
+      const selectedProd = products.find(p => p.id === productId);
+      const defaultUnitPrice = selectedProd ? (selectedProd.basePrice) : '';
+      const unitVal = unitPrice !== '' ? unitPrice : defaultUnitPrice;
+      rowDiv.innerHTML = `
+        <div class="input-group"><label>Product</label><select class="item-product">${products.map(p => `<option value="${p.id}" data-price="${p.basePrice}" data-engrave="${p.engravingPrice}" ${p.id===productId?'selected':''}>${p.name} (stock:${p.stock})</option>`).join('')}</select></div>
+        <div class="input-group"><label>Quantity</label><input type="number" class="item-qty" value="${quantity}" min="1" step="1"></div>
+        <div class="input-group"><label>Price per Unit (DA)</label><input type="number" class="item-unit-price" step="1" value="${unitVal}" placeholder="Leave empty for auto price"></div>
+        <div class="input-group"><label>Names to engrave (comma)</label><textarea class="item-engraving" rows="2">${engraving}</textarea></div>
+        <div style="display:flex; align-items:flex-end;"><button type="button" class="btn-icon remove-item"><i class="fas fa-trash-alt"></i></button></div>
+      `;
+      const productSelect = rowDiv.querySelector('.item-product');
+      const qtyInput = rowDiv.querySelector('.item-qty');
+      const unitPriceInput = rowDiv.querySelector('.item-unit-price');
+      const engravingInput = rowDiv.querySelector('.item-engraving');
+      const updateAutoPrice = () => {
+        const selectedOption = productSelect.options[productSelect.selectedIndex];
+        const basePrice = parseFloat(selectedOption.getAttribute('data-price'));
+        const engravePrice = parseFloat(selectedOption.getAttribute('data-engrave'));
+        const engravingText = engravingInput.value;
+        const nameCount = engravingText ? engravingText.split(',').filter(n => n.trim().length > 0).length : 1;
+        const autoPrice = basePrice + (engravePrice * nameCount);
+        if (!unitPriceInput.value || unitPriceInput.value === '') {
+          unitPriceInput.value = autoPrice;
+        }
+      };
+      productSelect.addEventListener('change', updateAutoPrice);
+      engravingInput.addEventListener('input', updateAutoPrice);
+      qtyInput.addEventListener('input', () => { if (!unitPriceInput.value) updateAutoPrice(); });
+      rowDiv.querySelector('.remove-item').addEventListener('click', () => rowDiv.remove());
+      container.appendChild(rowDiv);
+      updateAutoPrice();
+    }
+    addItemRow(products[0]?.id || '', 1, '', '');
+    document.getElementById('addItemBtn').addEventListener('click', () => addItemRow(products[0]?.id || '', 1, '', ''));
+    document.getElementById('multiOrderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const items = [];
+      document.querySelectorAll('#itemsContainer > div').forEach(row => {
+        const productId = row.querySelector('.item-product').value;
+        const quantity = parseInt(row.querySelector('.item-qty').value) || 1;
+        const engraving = row.querySelector('.item-engraving').value;
+        let unitPrice = row.querySelector('.item-unit-price').value;
+        unitPrice = unitPrice ? parseFloat(unitPrice) : null;
+        if (productId) items.push({ productId, quantity, engravingNames: engraving, unitPrice });
+      });
+      if (items.length === 0) { alert("At least one product required"); return; }
+      const orderData = {
+        customerName: document.getElementById('custName').value,
+        phone: document.getElementById('custPhone').value,
+        city: document.getElementById('custCity').value,
+        deliveryType: document.getElementById('deliveryTypeSel').value,
+        deadlineDays: document.getElementById('deadlineDays').value,
+        items
+      };
+      if (!orderData.customerName) { alert("Customer name required"); return; }
+      const result = await addNewOrder(orderData);
+      if (result.success) { renderOrdersPage(); renderDashboardIfVisible(); } else alert(result.msg);
+    });
+    document.querySelectorAll('.status-update').forEach(sel => {
+      sel.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const orderId = parseInt(sel.getAttribute('data-id'));
+        const newStatus = sel.value;
+        await updateOrderStatus(orderId, newStatus);
+        sel.style.backgroundColor = getStatusColor(newStatus);
+        renderDashboardIfVisible();
+        renderOrdersPage();
+      });
+    });
+    document.querySelectorAll('.edit-order-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const orderId = parseInt(btn.getAttribute('data-id'));
+        openEditOrderModal(orderId);
+      });
+    });
+    document.querySelectorAll('.delete-order-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        pendingDeleteOrderId = parseInt(btn.getAttribute('data-id'));
+        document.getElementById('deleteOrderInfo').innerText = `Order for ${btn.getAttribute('data-customer')}`;
+        document.getElementById('deleteOrderModal').style.display = 'flex';
+      });
+    });
+    const searchInput = document.getElementById('searchPhoneInput');
+    const searchBtn = document.getElementById('searchPhoneBtn');
+    function performSearch() {
+      if (searchInput) {
+        window._phoneSearchTerm = searchInput.value;
+        renderOrdersPage();
       }
-    };
-    productSelect.addEventListener('change', updateAutoPrice);
-    engravingInput.addEventListener('input', updateAutoPrice);
-    qtyInput.addEventListener('input', () => { if (!unitPriceInput.value) updateAutoPrice(); });
-    rowDiv.querySelector('.remove-item').addEventListener('click', () => rowDiv.remove());
-    container.appendChild(rowDiv);
-    updateAutoPrice();
+    }
+    if (searchBtn) searchBtn.addEventListener('click', performSearch);
+    if (searchInput) searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); performSearch(); } });
+    const statusSelect = document.getElementById('statusFilterSelect');
+    if (statusSelect) {
+      statusSelect.addEventListener('change', (e) => {
+        window._statusFilter = e.target.value;
+        renderOrdersPage();
+      });
+    }
   }
-  addItemRow(products[0]?.id || '', 1, '', '');
-  document.getElementById('addItemBtn').addEventListener('click', () => addItemRow(products[0]?.id || '', 1, '', ''));
-  
-  document.getElementById('multiOrderForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const items = [];
-    document.querySelectorAll('#itemsContainer > div').forEach(row => {
-      const productId = row.querySelector('.item-product').value;
-      const quantity = parseInt(row.querySelector('.item-qty').value) || 1;
-      const engraving = row.querySelector('.item-engraving').value;
-      let unitPrice = row.querySelector('.item-unit-price').value;
-      unitPrice = unitPrice ? parseFloat(unitPrice) : null;
-      if (productId) items.push({ productId, quantity, engravingNames: engraving, unitPrice });
-    });
-    if (items.length === 0) { alert("At least one product required"); return; }
-    const orderData = {
-      customerName: document.getElementById('custName').value,
-      phone: document.getElementById('custPhone').value,
-      city: document.getElementById('custCity').value,
-      deliveryType: document.getElementById('deliveryTypeSel').value,
-      deadlineDays: document.getElementById('deadlineDays').value,
-      items
-    };
-    if (!orderData.customerName) { alert("Customer name required"); return; }
-    const result = addNewOrder(orderData);
-    if (result.success) { renderOrdersPage(); renderDashboardIfVisible(); } else alert(result.msg);
-  });
-  
-  // Status update event
-  document.querySelectorAll('.status-update').forEach(sel => {
-    sel.addEventListener('change', (e) => {
-      e.stopPropagation();
-      const orderId = parseInt(sel.getAttribute('data-id'));
-      const newStatus = sel.value;
-      updateOrderStatus(orderId, newStatus);
-      sel.style.backgroundColor = getStatusColor(newStatus);
-      renderDashboardIfVisible();
-      renderOrdersPage();   // re-render to keep filters
-    });
-  });
-  
-  // Edit order event
-  document.querySelectorAll('.edit-order-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const orderId = parseInt(btn.getAttribute('data-id'));
-      openEditOrderModal(orderId);
-    });
-  });
-  
-  // Delete order event
-  document.querySelectorAll('.delete-order-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      pendingDeleteOrderId = parseInt(btn.getAttribute('data-id'));
-      document.getElementById('deleteOrderInfo').innerText = `Order for ${btn.getAttribute('data-customer')}`;
-      document.getElementById('deleteOrderModal').style.display = 'flex';
-    });
-  });
-  
-  // --- Search by Phone functionality ---
-  const searchInput = document.getElementById('searchPhoneInput');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      window._phoneSearchTerm = e.target.value;
-      renderOrdersPage();
-    });
-  }
-  
-  // --- Status filter functionality ---
-  const statusSelect = document.getElementById('statusFilterSelect');
-  if (statusSelect) {
-    statusSelect.addEventListener('change', (e) => {
-      window._statusFilter = e.target.value;
-      renderOrdersPage();
-    });
-  }
-}
 
   function renderQuickOrderPage() {
     const html = `
@@ -965,7 +938,7 @@ name: Ahmed Benali
 phone: 0555123456
 city: Algiers
 delivery: Home
-products: Wooden Coaster Set x2, Acrylic Keychain x1
+products: مشط 2, مرايا 1
 total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px solid #cbd5e1; font-family:inherit;"></textarea>
         <div style="margin-top:16px; display:flex; gap:12px;">
           <button id="parseQuickOrderBtn" class="btn-primary"><i class="fas fa-magic"></i> Parse & Create Order</button>
@@ -991,8 +964,8 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
         <div style="margin-top:16px;"><button id="confirmQuickOrderBtn" class="btn-primary">Confirm & Create Order</button></div>`;
       previewDiv.innerHTML = previewHtml;
       previewDiv.style.display = 'block';
-      document.getElementById('confirmQuickOrderBtn').addEventListener('click', () => {
-        createOrderFromParsed(parsed);
+      document.getElementById('confirmQuickOrderBtn').addEventListener('click', async () => {
+        await createOrderFromParsed(parsed);
         previewDiv.style.display = 'none';
         textarea.value = '';
         renderOrdersPage();
@@ -1002,159 +975,68 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   }
 
   function renderProductsPage() {
-  // Prepare edit mode flag and variables
-  let currentEditId = null;
-  
-  const rows = products.map(p => `
-    <tr>
-      <td><strong>${escapeHtml(p.name)}</strong></td>
-      <td>${formatDA(p.basePrice)}</td>
-      <td>${formatDA(p.engravingPrice)}</td>
-      <td class="${p.stock <= 3 ? 'alert-badge' : ''}">${p.stock}</td>
-      <td class="action-buttons">
-        <button class="btn-secondary edit-product-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-base="${p.basePrice}" data-engrave="${p.engravingPrice}" style="padding:6px 12px;"><i class="fas fa-edit"></i> Edit</button>
-        <button class="btn-secondary restock-btn" data-id="${p.id}" style="padding:6px 12px;"><i class="fas fa-boxes"></i> Restock</button>
-        <button class="btn-danger delete-product-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" style="padding:6px 12px;"><i class="fas fa-trash"></i> Delete</button>
-      </td>
-    </tr>
-  `).join('');
-  
-  const html = `
-    <div class="form-card">
-      <h3 id="productFormTitle">Add New Product</h3>
-      <form id="productForm">
-        <div class="form-grid">
-          <div class="input-group"><label>Name</label><input type="text" id="prodName" required></div>
-          <div class="input-group"><label>Base Price (DA)</label><input type="number" step="1" id="prodBase" required></div>
-          <div class="input-group"><label>Engraving Price (DA)</label><input type="number" step="1" id="prodEngrave" required></div>
-          <div class="input-group"><label>Quantity to Add (for new product or restock)</label><input type="number" id="prodStock" value="1" required></div>
-        </div>
-        <div style="display: flex; gap: 12px; margin-top: 16px;">
-          <button type="submit" class="btn-primary" id="submitProductBtn"><i class="fas fa-save"></i> Add / Update</button>
-          <button type="button" id="cancelEditProductBtn" class="btn-secondary" style="display: none;">Cancel Edit</button>
-        </div>
-        <input type="hidden" id="editProductId" value="">
-      </form>
-    </div>
-    <div class="form-card">
-      <h3>Inventory</h3>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr><th>Product</th><th>Base Price</th><th>Engraving</th><th>Stock</th><th>Actions</th></tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+    const rows = products.map(p => `
+      <tr>
+        <td><strong>${escapeHtml(p.name)}</strong></td>
+        <td>${formatDA(p.basePrice)}</td>
+        <td>${formatDA(p.engravingPrice)}</td>
+        <td class="${p.stock <= 3 ? 'alert-badge' : ''}">${p.stock}</td>
+        <td class="action-buttons">
+          <button class="btn-secondary edit-product-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-base="${p.basePrice}" data-engrave="${p.engravingPrice}" style="padding:6px 12px;"><i class="fas fa-edit"></i> Edit</button>
+          <button class="btn-secondary restock-btn" data-id="${p.id}" style="padding:6px 12px;"><i class="fas fa-boxes"></i> Restock</button>
+          <button class="btn-danger delete-product-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" style="padding:6px 12px;"><i class="fas fa-trash"></i> Delete</button>
+        </td>
+      </tr>
+    `).join('');
+    const html = `
+      <div class="form-card">
+        <h3 id="productFormTitle">Add New Product</h3>
+        <form id="productForm">
+          <div class="form-grid">
+            <div class="input-group"><label>Name</label><input type="text" id="prodName" required></div>
+            <div class="input-group"><label>Base Price (DA)</label><input type="number" step="1" id="prodBase" required></div>
+            <div class="input-group"><label>Engraving Price (DA)</label><input type="number" step="1" id="prodEngrave" required></div>
+            <div class="input-group"><label>Quantity to Add (for new product or restock)</label><input type="number" id="prodStock" value="1" required></div>
+          </div>
+          <div style="display: flex; gap: 12px; margin-top: 16px;">
+            <button type="submit" class="btn-primary" id="submitProductBtn"><i class="fas fa-save"></i> Add / Update</button>
+            <button type="button" id="cancelEditProductBtn" class="btn-secondary" style="display: none;">Cancel Edit</button>
+          </div>
+          <input type="hidden" id="editProductId" value="">
+        </form>
       </div>
-    </div>
-  `;
-  
-  document.getElementById('pageContent').innerHTML = html;
-  
-  // Helper to escape HTML in product names
-  function escapeHtml(str) {
-    return str.replace(/[&<>]/g, function(m) {
-      if (m === '&') return '&amp;';
-      if (m === '<') return '&lt;';
-      if (m === '>') return '&gt;';
-      return m;
-    });
-  }
-  
-  // Get form elements
-  const form = document.getElementById('productForm');
-  const nameInput = document.getElementById('prodName');
-  const baseInput = document.getElementById('prodBase');
-  const engraveInput = document.getElementById('prodEngrave');
-  const stockInput = document.getElementById('prodStock');
-  const editIdInput = document.getElementById('editProductId');
-  const cancelBtn = document.getElementById('cancelEditProductBtn');
-  const formTitle = document.getElementById('productFormTitle');
-  const submitBtn = document.getElementById('submitProductBtn');
-  
-  // Cancel edit
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      editIdInput.value = '';
-      formTitle.innerText = 'Add New Product';
-      submitBtn.innerHTML = '<i class="fas fa-save"></i> Add / Update';
-      cancelBtn.style.display = 'none';
-      nameInput.value = '';
-      baseInput.value = '';
-      engraveInput.value = '';
-      stockInput.value = '1';
-      stockInput.placeholder = 'Quantity to add';
-    });
-  }
-  
-  // Edit buttons
-  document.querySelectorAll('.edit-product-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-id');
-      const name = btn.getAttribute('data-name');
-      const base = btn.getAttribute('data-base');
-      const engrave = btn.getAttribute('data-engrave');
-      editIdInput.value = id;
-      nameInput.value = name;
-      baseInput.value = base;
-      engraveInput.value = engrave;
-      stockInput.value = '0';  // Don't add stock by default
-      stockInput.placeholder = 'Extra quantity to add (optional)';
-      formTitle.innerText = 'Edit Product';
-      submitBtn.innerHTML = '<i class="fas fa-save"></i> Update Product';
-      cancelBtn.style.display = 'inline-flex';
-    });
-  });
-  
-  // Restock buttons (unchanged)
-  document.querySelectorAll('.restock-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      let qty = parseInt(prompt("Enter additional quantity to add:", "10"));
-      if (qty && qty > 0) {
-        const prodId = btn.getAttribute('data-id');
-        restockProductById(prodId, qty);
-        renderProductsPage();
-        renderDashboardIfVisible();
-      }
-    });
-  });
-  
-  // Delete buttons (unchanged)
-  document.querySelectorAll('.delete-product-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      pendingDeleteProductId = btn.getAttribute('data-id');
-      pendingDeleteProductName = btn.getAttribute('data-name');
-      document.getElementById('deleteProductName').innerText = pendingDeleteProductName;
-      document.getElementById('deleteProductModal').style.display = 'flex';
-    });
-  });
-  
-  // Form submit handler (add or update)
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const editId = editIdInput.value;
-    const name = nameInput.value.trim();
-    const basePrice = parseFloat(baseInput.value);
-    const engravingPrice = parseFloat(engraveInput.value);
-    let stock = parseInt(stockInput.value);
-    if (isNaN(stock)) stock = 0;
-    
-    if (!name) { alert("Product name required"); return; }
-    if (isNaN(basePrice) || isNaN(engravingPrice)) { alert("Valid prices required"); return; }
-    
-    if (editId) {
-      // Update existing product (name, prices, add optional stock)
-      const existing = products.find(p => p.id === editId);
-      if (existing) {
-        existing.name = name;
-        existing.basePrice = basePrice;
-        existing.engravingPrice = engravingPrice;
-        if (stock > 0) existing.stock += stock;
-        saveProducts();
-        recalcAllOrdersFinance();
-        saveOrders();
-        showToast(`Product "${name}" updated`);
-        // Reset form
+      <div class="form-card">
+        <h3>Inventory</h3>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Product</th><th>Base Price</th><th>Engraving</th><th>Stock</th><th>Actions</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+    function escapeHtml(str) {
+      return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+      });
+    }
+    const form = document.getElementById('productForm');
+    const nameInput = document.getElementById('prodName');
+    const baseInput = document.getElementById('prodBase');
+    const engraveInput = document.getElementById('prodEngrave');
+    const stockInput = document.getElementById('prodStock');
+    const editIdInput = document.getElementById('editProductId');
+    const cancelBtn = document.getElementById('cancelEditProductBtn');
+    const formTitle = document.getElementById('productFormTitle');
+    const submitBtn = document.getElementById('submitProductBtn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
         editIdInput.value = '';
         formTitle.innerText = 'Add New Product';
         submitBtn.innerHTML = '<i class="fas fa-save"></i> Add / Update';
@@ -1164,27 +1046,88 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
         engraveInput.value = '';
         stockInput.value = '1';
         stockInput.placeholder = 'Quantity to add';
-        renderProductsPage();
-        renderDashboardIfVisible();
-      } else {
-        alert("Product not found");
-      }
-    } else {
-      // Add new product
-      addOrUpdateProduct({
-        id: null,
-        name: name,
-        basePrice: basePrice,
-        engravingPrice: engravingPrice,
-        stock: stock
       });
-      renderProductsPage();
-      recalcAllOrdersFinance();
-      saveOrders();
-      renderDashboardIfVisible();
     }
-  });
-}
+    document.querySelectorAll('.edit-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const name = btn.getAttribute('data-name');
+        const base = btn.getAttribute('data-base');
+        const engrave = btn.getAttribute('data-engrave');
+        editIdInput.value = id;
+        nameInput.value = name;
+        baseInput.value = base;
+        engraveInput.value = engrave;
+        stockInput.value = '0';
+        stockInput.placeholder = 'Extra quantity to add (optional)';
+        formTitle.innerText = 'Edit Product';
+        submitBtn.innerHTML = '<i class="fas fa-save"></i> Update Product';
+        cancelBtn.style.display = 'inline-flex';
+      });
+    });
+    document.querySelectorAll('.restock-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        let qty = parseInt(prompt("Enter additional quantity to add:", "10"));
+        if (qty && qty > 0) {
+          const prodId = btn.getAttribute('data-id');
+          await restockProductById(prodId, qty);
+          renderProductsPage();
+          renderDashboardIfVisible();
+        }
+      });
+    });
+    document.querySelectorAll('.delete-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pendingDeleteProductId = btn.getAttribute('data-id');
+        pendingDeleteProductName = btn.getAttribute('data-name');
+        document.getElementById('deleteProductName').innerText = pendingDeleteProductName;
+        document.getElementById('deleteProductModal').style.display = 'flex';
+      });
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editId = editIdInput.value;
+      const name = nameInput.value.trim();
+      const basePrice = parseFloat(baseInput.value);
+      const engravingPrice = parseFloat(engraveInput.value);
+      let stock = parseInt(stockInput.value);
+      if (isNaN(stock)) stock = 0;
+      if (!name) { alert("Product name required"); return; }
+      if (isNaN(basePrice) || isNaN(engravingPrice)) { alert("Valid prices required"); return; }
+      if (editId) {
+        const existing = products.find(p => p.id === editId);
+        if (existing) {
+          existing.name = name;
+          existing.basePrice = basePrice;
+          existing.engravingPrice = engravingPrice;
+          if (stock > 0) existing.stock += stock;
+          await saveProducts();
+          recalcAllOrdersFinance();
+          await saveOrders();
+          showToast(`Product "${name}" updated`);
+          editIdInput.value = '';
+          formTitle.innerText = 'Add New Product';
+          submitBtn.innerHTML = '<i class="fas fa-save"></i> Add / Update';
+          cancelBtn.style.display = 'none';
+          nameInput.value = '';
+          baseInput.value = '';
+          engraveInput.value = '';
+          stockInput.value = '1';
+          stockInput.placeholder = 'Quantity to add';
+          renderProductsPage();
+          renderDashboardIfVisible();
+        } else {
+          alert("Product not found");
+        }
+      } else {
+        await addOrUpdateProduct({ id: null, name, basePrice, engravingPrice, stock });
+        renderProductsPage();
+        recalcAllOrdersFinance();
+        await saveOrders();
+        renderDashboardIfVisible();
+      }
+    });
+  }
 
   function renderReportsPage() {
     const stats = getStats();
@@ -1210,7 +1153,6 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
       </div>
     `;
     document.getElementById('pageContent').innerHTML = html;
-    // attach all event listeners (same as before)
     document.getElementById('exportFullBackupBtn').addEventListener('click', () => {
       const data = { orders, products };
       const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
@@ -1250,17 +1192,16 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
       if (e.target.files.length) {
         const file = e.target.files[0];
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
           try {
             const data = JSON.parse(ev.target.result);
             if (data.orders && Array.isArray(data.orders) && data.products && Array.isArray(data.products)) {
               if (confirm('Import will replace all current data. Continue?')) {
                 orders = data.orders;
                 products = data.products;
-                saveOrders();
-                saveProducts();
+                await saveOrders();
+                await saveProducts();
                 recalcAllOrdersFinance();
-                saveOrders();
                 showToast('Backup restored');
                 if (currentPage === 'dashboard') renderDashboard();
                 else if (currentPage === 'orders') renderOrdersPage();
@@ -1279,7 +1220,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
       if (e.target.files.length) {
         const file = e.target.files[0];
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
           const text = ev.target.result;
           const lines = text.split('\n').filter(l => l.trim());
           if (lines.length < 2) { alert('File empty'); return; }
@@ -1312,9 +1253,9 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
                 products.push(p);
               }
             }
-            saveProducts();
+            await saveProducts();
             recalcAllOrdersFinance();
-            saveOrders();
+            await saveOrders();
             showToast('Products imported');
             if (currentPage === 'products') renderProductsPage();
             else if (currentPage === 'dashboard') renderDashboard();
@@ -1328,7 +1269,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
       if (e.target.files.length) {
         const file = e.target.files[0];
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
           const text = ev.target.result;
           const lines = text.split('\n').filter(l => l.trim());
           if (lines.length < 2) { alert('File empty'); return; }
@@ -1367,7 +1308,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
               orders.push(o);
             }
             recalcAllOrdersFinance();
-            saveOrders();
+            await saveOrders();
             showToast('Orders imported');
             if (currentPage === 'orders') renderOrdersPage();
             else if (currentPage === 'dashboard') renderDashboard();
@@ -1400,7 +1341,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
         const lineProfit = lineTotal - (prod.basePrice * qty);
         itemsHtml += `<tr><td>${prod.name}</td><td>${qty}</td><td>${formatDA(unitPrice)}</td><td>${it.engravingNames || '-'}</td><td>${formatDA(lineTotal)}</td><td>${formatDA(lineProfit)}</td></tr>`;
       } else {
-        itemsHtml += `<tr><td>Deleted Product</td><td>${it.quantity}</td><td>-</td><td>${it.engravingNames}</td><td>-</td><td>-</td></tr>`;
+        itemsHtml += `<td>Deleted Product</td><td>${it.quantity}</td><td>-</td><td>${it.engravingNames}</td><td>-</td><td>-</td>`;
       }
     });
     itemsHtml += '</table>';
@@ -1421,7 +1362,6 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); pendingDeleteOrderId = null; currentEditOrderId = null; }
   function renderDashboardIfVisible() { if (document.querySelector('.nav-item.active')?.getAttribute('data-page') === 'dashboard') renderDashboard(); }
 
-  let currentPage = 'dashboard';
   function navigateTo(page) {
     currentPage = page;
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -1436,6 +1376,7 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
     if (window.innerWidth < 768) document.getElementById('sidebar').classList.remove('open');
   }
 
+  // ========== INITIALIZATION ==========
   document.getElementById('menuToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
   document.querySelectorAll('.nav-item').forEach(i => i.addEventListener('click', () => navigateTo(i.getAttribute('data-page'))));
   document.getElementById('closeModalBtn')?.addEventListener('click', closeModals);
@@ -1443,8 +1384,8 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   document.getElementById('closeDeleteProductModal')?.addEventListener('click', closeModals);
   document.getElementById('cancelDeleteOrderBtn')?.addEventListener('click', closeModals);
   document.getElementById('cancelDeleteProductBtn')?.addEventListener('click', closeModals);
-  document.getElementById('confirmDeleteOrderBtn')?.addEventListener('click', () => { if (pendingDeleteOrderId) { deleteOrder(pendingDeleteOrderId); renderOrdersPage(); renderDashboardIfVisible(); closeModals(); } });
-  document.getElementById('confirmDeleteProductBtn')?.addEventListener('click', () => { if (pendingDeleteProductId) { deleteProduct(pendingDeleteProductId, pendingDeleteProductName); renderProductsPage(); renderDashboardIfVisible(); if (currentPage === 'orders') renderOrdersPage(); closeModals(); } });
+  document.getElementById('confirmDeleteOrderBtn')?.addEventListener('click', async () => { if (pendingDeleteOrderId) { await deleteOrder(pendingDeleteOrderId); renderOrdersPage(); renderDashboardIfVisible(); closeModals(); } });
+  document.getElementById('confirmDeleteProductBtn')?.addEventListener('click', async () => { if (pendingDeleteProductId) { await deleteProduct(pendingDeleteProductId, pendingDeleteProductName); renderProductsPage(); renderDashboardIfVisible(); if (currentPage === 'orders') renderOrdersPage(); closeModals(); } });
   document.getElementById('closeEditModal')?.addEventListener('click', () => document.getElementById('editOrderModal').style.display = 'none');
   document.getElementById('cancelEditBtn')?.addEventListener('click', () => document.getElementById('editOrderModal').style.display = 'none');
   document.getElementById('editOrderForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveOrderEdit(); });
@@ -1453,8 +1394,11 @@ total: 3500" style="width:100%; padding:12px; border-radius:16px; border:1px sol
   window.onclick = e => { if (e.target.classList.contains('modal-overlay')) closeModals(); };
   document.getElementById('liveDate').innerText = new Date().toLocaleDateString('en-DZ', { year:'numeric', month:'long', day:'numeric' });
 
-   loadStorage();
-  navigateTo('dashboard');
+  // Start the app: load data then navigate
+  (async () => {
+    await loadFromFirestore();
+    navigateTo('dashboard');
+  })();
 </script>
 </body>
 </html>
